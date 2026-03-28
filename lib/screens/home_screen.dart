@@ -28,7 +28,8 @@ class _HomeScreenState extends State<HomeScreen> {
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => screen,
         transitionsBuilder: transitionsBuilder,
-        transitionDuration: const Duration(milliseconds: 400),
+        transitionDuration: const Duration(milliseconds: 300), // Slightly faster
+        reverseTransitionDuration: const Duration(milliseconds: 300),
       ),
     ).then((_) {
       if (mounted) setState(() => _isTransitioning = false);
@@ -40,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Consumer<AppState>(
       builder: (context, appState, child) {
         return Scaffold(
+          backgroundColor: Colors.black, // Fallback
           body: GestureDetector(
             onVerticalDragEnd: (details) {
               if (details.primaryVelocity! > 0) {
@@ -59,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   (context, animation, secondaryAnimation, child) {
                     return SlideTransition(
                       position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-                      child: child,
+                      child: FadeTransition(opacity: animation, child: child), // Blend fade & slide
                     );
                   }
                 );
@@ -72,24 +74,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 const AgentModeScreen(),
                 (context, animation, secondaryAnimation, child) {
                   return ScaleTransition(
-                    scale: Tween<double>(begin: 1.2, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                    scale: Tween<double>(begin: 1.1, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
                     child: FadeTransition(opacity: animation, child: child),
                   );
                 }
               );
             },
             child: AnimatedContainer(
-              duration: const Duration(seconds: 1),
-              curve: Curves.easeInOut,
+              duration: const Duration(milliseconds: 800), // Smoother state change
+              curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
                 gradient: AppTheme.getBackgroundGradient(appState.currentMode),
               ),
               child: Stack(
                 children: [
-                  // Subtle noise overlay
+                  // Subtle noise overlay for texture
                   Positioned.fill(
                     child: Opacity(
-                      opacity: 0.03,
+                      opacity: 0.05,
                       child: Image.network(
                         'https://upload.wikimedia.org/wikipedia/commons/d/d4/Texture_of_white_noise.png',
                         repeat: ImageRepeat.repeat,
@@ -101,46 +103,57 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SizedBox(height: 60),
-                        // Clock
+                        const SizedBox(height: 72),
+                        // Clock (iOS style lock screen layout)
                         Center(
                           child: StreamBuilder(
                             stream: Stream.periodic(const Duration(seconds: 1)),
                             builder: (context, snapshot) {
                               return Text(
                                 DateFormat('HH:mm').format(DateTime.now()),
-                                style: Theme.of(context).textTheme.displayLarge,
+                                style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                                  shadows: [
+                                    Shadow(color: Colors.black.withOpacity(0.3), blurRadius: 30, offset: const Offset(0, 10))
+                                  ]
+                                ),
                               );
                             },
                           ),
-                        ).animate().fade(duration: 800.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
-                        const SizedBox(height: 10),
+                        ).animate().fade(duration: 800.ms).slideY(begin: -0.1, end: 0, curve: Curves.easeOut),
+                        const SizedBox(height: 4),
                         // Date
                         Center(
                           child: StreamBuilder(
                             stream: Stream.periodic(const Duration(minutes: 1)),
                             builder: (context, snapshot) {
                               return Text(
-                                DateFormat('EEEE, MMMM d').format(DateTime.now()).toUpperCase(),
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(letterSpacing: 2),
+                                DateFormat('EEEE, MMMM d').format(DateTime.now()),
+                                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                  color: AppTheme.textPrimary.withOpacity(0.9),
+                                  shadows: [
+                                    Shadow(color: Colors.black.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 5))
+                                  ]
+                                ),
                               );
                             },
                           ),
-                        ).animate().fade(duration: 800.ms, delay: 200.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
+                        ).animate().fade(duration: 800.ms, delay: 100.ms).slideY(begin: -0.1, end: 0, curve: Curves.easeOut),
                         const Spacer(),
-                        // Dynamic Dock
+
+                        // Floating iOS/VisionOS style Dock
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                           child: GlassContainer(
-                            height: 80,
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            height: 94,
                             borderRadius: 40,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            opacity: 0.2, // Slightly more opaque to ground the dock
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: _buildDockItems(appState, context),
                             ),
                           ),
-                        ).animate().fade(duration: 800.ms, delay: 400.ms).slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
+                        ).animate().fade(duration: 800.ms, delay: 200.ms).slideY(begin: 0.1, end: 0, curve: Curves.easeOut),
                       ],
                     ),
                   ),
@@ -155,24 +168,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Widget> _buildDockItems(AppState appState, BuildContext context) {
     List<Widget> items = [];
-
-    // Show up to 4 real apps in the dock
     final maxApps = 4;
     int count = 0;
 
+    // Attempt to prioritize certain standard apps if available (like Phone, Messages), but for now, just pick first few.
     for (var app in appState.installedApps) {
       if (count >= maxApps) break;
-      // Skip the launcher itself
       if (app.packageName == 'com.example.horizon_launcher') continue;
 
       items.add(
         GestureDetector(
           onTap: () => appState.launchApp(app.packageName),
-          child: SizedBox(
-            width: 48,
-            height: 48,
+          child: Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 12, offset: const Offset(0, 6))
+              ]
+            ),
             child: app is ApplicationWithIcon
-              ? Image.memory(app.icon, fit: BoxFit.contain)
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(16), // Slight roundness instead of full circle for a modern look
+                  child: Image.memory(app.icon, fit: BoxFit.contain)
+                )
               : const CircleAvatar(backgroundColor: Colors.white12, child: Icon(Icons.android, color: Colors.white)),
           ),
         )
@@ -180,7 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
       count++;
     }
 
-    // App Drawer Button
+    // App Drawer Button - styled specifically
     items.add(
       GestureDetector(
         onTap: () {
@@ -190,20 +210,26 @@ class _HomeScreenState extends State<HomeScreen> {
             (context, animation, secondaryAnimation, child) {
               return SlideTransition(
                 position: Tween<Offset>(begin: const Offset(0, 1), end: Offset.zero).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
-                child: child,
+                child: FadeTransition(opacity: animation, child: child),
               );
             }
           );
         },
         child: Container(
-          width: 48,
-          height: 48,
+          width: 60,
+          height: 60,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppTheme.accentBlue.withOpacity(0.2),
-            border: Border.all(color: AppTheme.accentBlue.withOpacity(0.5)),
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF3B82F6), Color(0xFF2563EB)], // Premium blue gradient
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(color: const Color(0xFF2563EB).withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 8))
+            ]
           ),
-          child: const Icon(Icons.apps, color: AppTheme.accentBlue),
+          child: const Icon(Icons.grid_view_rounded, color: Colors.white, size: 28),
         ),
       )
     );

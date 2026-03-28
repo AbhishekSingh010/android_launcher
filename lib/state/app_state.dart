@@ -24,9 +24,12 @@ class AppState extends ChangeNotifier {
   bool get isFocusTimerRunning => _focusTimer != null && _focusTimer!.isActive;
   int get focusTimeRemaining => _focusTimeRemaining;
 
-  // Tasks (Mock Mission Control)
-  List<String> _tasks = ['Complete Mission Briefing', 'Review Objective Beta', 'Synchronize Data'];
+  // Tasks (Mission Control)
+  List<String> _tasks = ['Initialize system', 'Review daily objectives'];
   List<String> get tasks => _tasks;
+
+  bool _isGeneratingTasks = false;
+  bool get isGeneratingTasks => _isGeneratingTasks;
 
   AppState() {
     _init();
@@ -107,6 +110,27 @@ class AppState extends ChangeNotifier {
 
   void addTask(String task) {
     _tasks.add(task);
+    notifyListeners();
+  }
+
+  Future<void> generateAITasks() async {
+    if (!aiService.isInitialized) return;
+
+    _isGeneratingTasks = true;
+    notifyListeners();
+
+    final prompt = "You are the AI core of a futuristic productivity launcher. Generate 3 short, actionable, highly-focused daily objectives for the user. Do not use markdown, bullet points, or numbering. Just separate each task with a pipeline character (|). Make them sound like military or agent objectives (e.g., 'Execute morning workout protocol|Draft Q3 report|Clear communications inbox').";
+
+    final response = await aiService.getSuggestion(prompt);
+
+    if (response.contains('|')) {
+      final newTasks = response.split('|').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      _tasks = newTasks;
+    } else {
+      _tasks.add("Failed to synchronize objectives. Retrying protocol.");
+    }
+
+    _isGeneratingTasks = false;
     notifyListeners();
   }
 }
